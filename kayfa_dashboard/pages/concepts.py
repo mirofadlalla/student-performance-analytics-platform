@@ -90,8 +90,9 @@ def render():
         st.markdown('<div class="chart-card"><h3>🔥 Concept Failure Rate Heatmap</h3>', unsafe_allow_html=True)
         if "course_id" in concepts.columns and "concept_name" in concepts.columns and "failure_rate_pct" in concepts.columns:
             top_by_course = (
-                concepts.groupby("course_id")
-                .apply(lambda x: x.nlargest(5, "failure_rate_pct"))
+                concepts.sort_values("failure_rate_pct", ascending=False)
+                .groupby("course_id")
+                .head(5)
                 .reset_index(drop=True)
             )
             if not top_by_course.empty:
