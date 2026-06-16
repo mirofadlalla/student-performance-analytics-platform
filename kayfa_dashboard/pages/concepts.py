@@ -73,55 +73,35 @@ def render():
 
         bar_colors = [get_bar_color(r) for r in top15_sorted["failure_rate_pct"]]
 
-        if "course_name" in top15_sorted.columns:
-            # Color by course (use distinct colors per course)
-            course_palette = {
-                "Python Programming":          "#636EFA" if theme == "dark" else "#3F51B5",
-                "Cybersecurity Essentials":     "#EF553B" if theme == "dark" else "#E53935",
-                "Data Analytics Fundamentals":  "#00CC96" if theme == "dark" else "#00B0FF",
-                "Machine Learning Basics":      "#AB47BC" if theme == "dark" else "#9C27B0",
-                "Digital Marketing":            "#FFA726" if theme == "dark" else "#FB8C00",
-                "Web Development":              "#26C6DA" if theme == "dark" else "#00ACC1",
-            }
-            
-        if "course_name" in top15_sorted.columns:
-            # Color by course (use distinct colors per course)
-            course_palette = {
-                "Python Programming":          "#636EFA" if theme == "dark" else "#3F51B5",
-                "Cybersecurity Essentials":     "#EF553B" if theme == "dark" else "#E53935",
-                "Data Analytics Fundamentals":  "#00CC96" if theme == "dark" else "#00B0FF",
-                "Machine Learning Basics":      "#AB47BC" if theme == "dark" else "#9C27B0",
-                "Digital Marketing":            "#FFA726" if theme == "dark" else "#FB8C00",
-                "Web Development":              "#26C6DA" if theme == "dark" else "#00ACC1",
-            }
-            
-            # Create a unique label for the y-axis to prevent merging duplicate concepts
-            top15_sorted["y_label"] = top15_sorted["concept_name"] + " (" + top15_sorted["course_name"] + ")"
-            
-            fig = go.Figure()
-            for course, group_df in top15_sorted.groupby("course_name", sort=False):
-                fig.add_trace(go.Bar(
-                    x=group_df["failure_rate_pct"],
-                    y=group_df["y_label"],
-                    orientation="h",
-                    name=course,
-                    marker_color=course_palette.get(course, BLUE),
-                    text=group_df["failure_rate_pct"].round(1).astype(str) + "%",
-                    textposition="outside",
-                    hovertemplate="<b>%{y}</b><br>Failure Rate: %{x:.1f}%<extra></extra>",
-                ))
-            fig.update_layout(barmode="group")
-        else:
-            fig = go.Figure(go.Bar(
-                x=top15_sorted["failure_rate_pct"],
-                y=top15_sorted["concept_name"],
-                orientation="h",
-                marker_color=bar_colors,
-                text=top15_sorted["failure_rate_pct"].round(1).astype(str) + "%",
-                textposition="outside",
-            ))
+        # We want to display each concept-course combination as a separate row.
+        # Create a clean label combining concept and course name for the y-axis.
+        top15_sorted["y_label"] = top15_sorted["concept_name"] + " (" + top15_sorted["course_name"] + ")"
 
+        # Define distinct colors for each course
+        course_palette = {
+            "Python Programming":          "#636EFA" if theme == "dark" else "#3F51B5",
+            "Cybersecurity Essentials":     "#EF553B" if theme == "dark" else "#E53935",
+            "Data Analytics Fundamentals":  "#00CC96" if theme == "dark" else "#00B0FF",
+            "Machine Learning Basics":      "#AB47BC" if theme == "dark" else "#9C27B0",
+            "Digital Marketing":            "#FFA726" if theme == "dark" else "#FB8C00",
+            "Web Development":              "#26C6DA" if theme == "dark" else "#00ACC1",
+        }
+
+        fig = go.Figure()
+        for course, group_df in top15_sorted.groupby("course_name", sort=False):
+            fig.add_trace(go.Bar(
+                x=group_df["failure_rate_pct"],
+                y=group_df["y_label"],
+                orientation="h",
+                name=course,
+                marker_color=course_palette.get(course, BLUE),
+                text=group_df["failure_rate_pct"].round(1).astype(str) + "%",
+                textposition="outside",
+                hovertemplate="<b>%{y}</b><br>Failure Rate: %{x:.1f}%<extra></extra>",
+            ))
+        
         fig.update_layout(
+            barmode="group",
             yaxis_categoryorder="total ascending",
         )
         fig = plotly_layout(fig, height=520)
