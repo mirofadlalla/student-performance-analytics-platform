@@ -111,7 +111,7 @@ def render():
             fig_grouped.add_trace(go.Bar(
                 x=q12["group_id"], y=q12["stated_num_students"],
                 name="Stated Count",
-                marker_color=(BLUE + "66") if len(BLUE) == 7 else BLUE,
+                marker_color="rgba(59, 130, 246, 0.4)" if theme == "light" else "rgba(99, 110, 250, 0.4)",
                 text=q12["stated_num_students"],
                 textposition="outside",
             ))

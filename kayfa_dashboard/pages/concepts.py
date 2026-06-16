@@ -76,28 +76,32 @@ def render():
         if "course_name" in top15_sorted.columns:
             # Color by course (use distinct colors per course)
             course_palette = {
-                "Data Structures & Algorithms": "#3B82F6" if theme == "light" else "#636EFA",
-                "Machine Learning":             "#EF4444" if theme == "light" else "#EF553B",
-                "Digital Marketing":            "#F59E0B" if theme == "light" else "#FBD24C",
-                "Python Fundamentals":          "#10B981" if theme == "light" else "#00CC96",
-                "Web Development":              "#6366F1" if theme == "light" else "#8B5CF6",
-                "Database Design":              "#0EA5E9" if theme == "light" else "#22D3EE",
-                "Cybersecurity Essentials":     "#8B5CF6" if theme == "light" else "#A78BFA",
+                "Python Programming":          "#636EFA" if theme == "dark" else "#3F51B5",
+                "Cybersecurity Essentials":     "#EF553B" if theme == "dark" else "#E53935",
+                "Data Analytics Fundamentals":  "#00CC96" if theme == "dark" else "#00B0FF",
+                "Machine Learning Basics":      "#AB47BC" if theme == "dark" else "#9C27B0",
+                "Digital Marketing":            "#FFA726" if theme == "dark" else "#FB8C00",
+                "Web Development":              "#26C6DA" if theme == "dark" else "#00ACC1",
             }
-            fig = px.bar(
-                top15_sorted,
-                x="failure_rate_pct", y="concept_name",
-                color="course_name",
-                orientation="h",
-                title="",
-                labels={
-                    "failure_rate_pct": "Failure Rate (%) — students who failed / students assessed × 100",
-                    "concept_name": "Concept",
-                    "course_name": "Course",
-                },
-                text=top15_sorted["failure_rate_pct"].round(1).astype(str) + "%",
-                color_discrete_map=course_palette,
-            )
+            
+            # To prevent Plotly from grouping identical concept names together on the y-axis, 
+            # we construct the figure using custom traces for each course.
+            fig = go.Figure()
+            # Sort top15_sorted by its index or order to keep the ranking correct
+            for course, group_df in top15_sorted.groupby("course_name", sort=False):
+                fig.add_trace(go.Bar(
+                    x=group_df["failure_rate_pct"],
+                    # We can use a unique identifier or custom coordinate mapping if needed, 
+                    # but simple go.Bar with individual entries works best when specifying explicit y lists.
+                    y=group_df["concept_name"],
+                    orientation="h",
+                    name=course,
+                    marker_color=course_palette.get(course, BLUE),
+                    text=group_df["failure_rate_pct"].round(1).astype(str) + "%",
+                    textposition="inside",
+                    hovertemplate="<b>%{y}</b><br>Course: " + course + "<br>Failure Rate: %{x:.1f}%<extra></extra>",
+                ))
+            fig.update_layout(barmode="stack") # Stack allows separate bars on the same category
         else:
             fig = go.Figure(go.Bar(
                 x=top15_sorted["failure_rate_pct"],
@@ -108,17 +112,11 @@ def render():
                 textposition="outside",
             ))
 
-        fig.add_vline(x=50, line_dash="dash", line_color=AMBER,
-                      annotation_text="50% failure threshold",
-                      annotation_font_color=AMBER)
-        fig.add_vline(x=70, line_dash="dash", line_color=RED,
-                      annotation_text="70% critical threshold",
-                      annotation_font_color=RED)
         fig.update_layout(
             yaxis_categoryorder="total ascending",
         )
         fig = plotly_layout(fig, height=520)
-        fig.update_xaxes(range=[0, 100], title_text="Failure Rate (%) — per-student basis")
+        fig.update_xaxes(range=[0, 100])
         st.plotly_chart(fig, use_container_width=True, config=chart_config())
 
     # Risk tier donut

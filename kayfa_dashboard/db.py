@@ -115,21 +115,21 @@ def _demo_concept_failures():
     # Failure rates are per-student percentages (students who failed / students assessed × 100)
     # Values are capped at 100 and validated to be realistic
     concepts = [
-        ("C002-K05","Recursion","C002","Data Structures & Algorithms",85.3),
-        ("C003-K12","Overfitting & Regularization","C003","Machine Learning",62.1),
-        ("C003-K08","Model Evaluation","C003","Machine Learning",58.4),
-        ("C005-K03","Funnel Analytics","C005","Digital Marketing",47.2),
-        ("C005-K01","SEO Fundamentals","C005","Digital Marketing",45.8),
-        ("C002-K11","Dynamic Programming","C002","Data Structures & Algorithms",44.1),
-        ("C003-K15","Neural Networks","C003","Machine Learning",42.7),
-        ("C002-K03","Trees & Graphs","C002","Data Structures & Algorithms",41.3),
-        ("C006-K04","SQL Joins","C006","Database Design",39.5),
-        ("C001-K07","OOP Concepts","C001","Python Fundamentals",37.2),
-        ("C004-K09","React Hooks","C004","Web Development",35.6),
-        ("C007-K02","Encryption Basics","C007","Cybersecurity Essentials",34.8),
-        ("C003-K02","Feature Engineering","C003","Machine Learning",33.1),
-        ("C002-K09","Sorting Algorithms","C002","Data Structures & Algorithms",31.4),
-        ("C001-K05","List Comprehension","C001","Python Fundamentals",28.9),
+        ("C002-K05","Recursion","C002","Python Programming",85.330873),
+        ("C007-K01","Overfitting & Regularization","C007","Cybersecurity Essentials",60.000000),
+        ("C007-K02","Model Evaluation","C007","Cybersecurity Essentials",50.000000),
+        ("C006-K01","Joins & Merges","C006","Data Analytics Fundamentals",48.314607),
+        ("C003-K12","Overfitting & Regularization","C003","Machine Learning Basics",47.126437),
+        ("C005-K03","Funnel Analytics","C005","Digital Marketing",46.839080),
+        ("C005-K01","SEO Basics","C005","Digital Marketing",46.551724),
+        ("C005-K02","Content Strategy","C005","Digital Marketing",45.114943),
+        ("C005-K04","Paid Ads","C005","Digital Marketing",43.390805),
+        ("C007-K03","Clustering","C007","Cybersecurity Essentials",25.000000),
+        ("C007-K04","Regression","C007","Cybersecurity Essentials",25.000000),
+        ("C004-K01","Responsive Design","C004","Web Development",22.613065),
+        ("C004-K02","JavaScript DOM","C004","Web Development",21.500000),
+        ("C004-K03","HTML & Semantics","C004","Web Development",20.400000),
+        ("C004-K04","HTTP & APIs","C004","Web Development",20.000000),
     ]
     rows = []
     for cid, cname, course_id, course_name, fr in concepts:
