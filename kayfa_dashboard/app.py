@@ -236,7 +236,6 @@ pages = {
     "students":  ("👥", "Student Intelligence"),
     "groups":    ("🏫", "Group Performance"),
     "concepts":  ("📚", "Concept Intelligence"),
-    "audit":     ("⚠️", "Data Quality Audit"),
 }
 
 nav_cols = st.columns([1, 1, 1, 1, 1, 0.45])
@@ -285,8 +284,6 @@ elif page == "groups":
     from pages import groups; groups.render()
 elif page == "concepts":
     from pages import concepts; concepts.render()
-elif page == "audit":
-    from pages import audit; audit.render()
 
 # ── Global Footer ────────────────────────────────────────────────────────────
 st.markdown("<div style='margin-top:48px;'></div>", unsafe_allow_html=True)
