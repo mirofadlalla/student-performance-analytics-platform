@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import io
 
 try:
     import certifi
@@ -112,36 +111,26 @@ def _demo_at_risk():
     ])
 
 def _demo_concept_failures():
-    # Failure rates are per-student percentages (students who failed / students assessed × 100)
-    # Values are capped at 100 and validated to be realistic
     concepts = [
-        ("C002-K05","Recursion","C002","Python Programming",85.330873),
-        ("C007-K01","Overfitting & Regularization","C007","Cybersecurity Essentials",60.000000),
-        ("C007-K02","Model Evaluation","C007","Cybersecurity Essentials",50.000000),
-        ("C006-K01","Joins & Merges","C006","Data Analytics Fundamentals",48.314607),
-        ("C003-K12","Overfitting & Regularization","C003","Machine Learning Basics",47.126437),
-        ("C005-K03","Funnel Analytics","C005","Digital Marketing",46.839080),
-        ("C005-K01","SEO Basics","C005","Digital Marketing",46.551724),
-        ("C005-K02","Content Strategy","C005","Digital Marketing",45.114943),
-        ("C005-K04","Paid Ads","C005","Digital Marketing",43.390805),
-        ("C007-K03","Clustering","C007","Cybersecurity Essentials",25.000000),
-        ("C007-K04","Regression","C007","Cybersecurity Essentials",25.000000),
-        ("C004-K01","Responsive Design","C004","Web Development",22.613065),
-        ("C004-K02","JavaScript DOM","C004","Web Development",21.500000),
-        ("C004-K03","HTML & Semantics","C004","Web Development",20.400000),
-        ("C004-K04","HTTP & APIs","C004","Web Development",20.000000),
+        ("C002-K05","Recursion","C002",85.3),
+        ("C003-K12","Overfitting & Regularization","C003",62.1),
+        ("C003-K08","Model Evaluation","C003",58.4),
+        ("C005-K03","Funnel Analytics","C005",47.2),
+        ("C005-K01","SEO Fundamentals","C005",45.8),
+        ("C002-K11","Dynamic Programming","C002",44.1),
+        ("C003-K15","Neural Networks","C003",42.7),
+        ("C002-K03","Trees & Graphs","C002",41.3),
+        ("C006-K04","SQL Joins","C006",39.5),
+        ("C001-K07","OOP Concepts","C001",37.2),
+        ("C004-K09","React Hooks","C004",35.6),
+        ("C007-K02","Encryption Basics","C007",34.8),
+        ("C003-K02","Feature Engineering","C003",33.1),
+        ("C002-K09","Sorting Algorithms","C002",31.4),
+        ("C001-K05","List Comprehension","C001",28.9),
     ]
     rows = []
-    for cid, cname, course_id, course_name, fr in concepts:
-        # Validate: failure_rate_pct must be between 0 and 100
-        fr_validated = max(0.0, min(100.0, fr))
-        rows.append({
-            "concept_id": cid,
-            "concept_name": cname,
-            "course_id": course_id,
-            "course_name": course_name,
-            "failure_rate_pct": fr_validated,
-        })
+    for cid, cname, course_id, fr in concepts:
+        rows.append({"concept_id":cid,"concept_name":cname,"course_id":course_id,"failure_rate_pct":fr})
     return pd.DataFrame(rows)
 
 def _demo_grade_trends():
@@ -212,11 +201,7 @@ def load_collection(collection_name: str) -> pd.DataFrame:
         try:
             docs = list(db[collection_name].find({}, {"_id": 0}))
             if docs:
-                df = pd.DataFrame(docs)
-                # Validate concept failure rates from live DB
-                if collection_name == "concept_failures" and "failure_rate_pct" in df.columns:
-                    df["failure_rate_pct"] = df["failure_rate_pct"].clip(0, 100)
-                return df
+                return pd.DataFrame(docs)
         except Exception:
             pass
     # Fallback to demo data
@@ -227,205 +212,52 @@ def load_collection(collection_name: str) -> pd.DataFrame:
 def is_demo_mode():
     return get_db() is None
 
-def get_theme():
-    """Return 'light' or 'dark' based on session state."""
-    return st.session_state.get("theme", "light")
-
 # ── Shared UI helpers ────────────────────────────────────────────────────────
 def plotly_layout(fig, title="", height=420):
-    theme = get_theme()
-    if theme == "dark":
-        paper_bg   = "rgba(0,0,0,0)"
-        plot_bg    = "rgba(0,0,0,0)"
-        font_color = "#94A3B8"
-        tick_color = "#64748B"
-        grid_color = "rgba(77,163,255,0.06)"
-        line_color = "rgba(77,163,255,0.1)"
-        legend_bg  = "rgba(11,16,32,0.8)"
-        legend_bc  = "rgba(77,163,255,0.2)"
-        hover_bg   = "#0F1A33"
-        hover_fc   = "#E2E8F0"
-        title_color = "#CBD5E1"
-    else:
-        paper_bg   = "rgba(0,0,0,0)"
-        plot_bg    = "rgba(248,250,252,0.8)"
-        font_color = "#334155"
-        tick_color = "#64748B"
-        grid_color = "rgba(100,116,139,0.12)"
-        line_color = "rgba(100,116,139,0.2)"
-        legend_bg  = "rgba(255,255,255,0.95)"
-        legend_bc  = "rgba(100,116,139,0.2)"
-        hover_bg   = "#FFFFFF"
-        hover_fc   = "#0F172A"
-        title_color = "#0F172A"
-
     fig.update_layout(
-        title=dict(text=title, font=dict(size=14, color=title_color, family="Inter"), x=0),
+        title=dict(text=title, font=dict(size=14, color="#CBD5E1", family="Inter"), x=0),
         height=height,
-        paper_bgcolor=paper_bg,
-        plot_bgcolor=plot_bg,
-        font=dict(family="Inter", color=font_color, size=12),
-        legend=dict(
-            bgcolor=legend_bg, bordercolor=legend_bc,
-            borderwidth=1, font=dict(size=11, color=font_color)
-        ),
-        xaxis=dict(
-            gridcolor=grid_color, linecolor=line_color,
-            tickfont=dict(color=tick_color, size=11),
-            title_font=dict(color=font_color)
-        ),
-        yaxis=dict(
-            gridcolor=grid_color, linecolor=line_color,
-            tickfont=dict(color=tick_color, size=11),
-            title_font=dict(color=font_color)
-        ),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter", color="#94A3B8", size=12),
+        legend=dict(bgcolor="rgba(11,16,32,0.8)", bordercolor="rgba(77,163,255,0.2)",
+                    borderwidth=1, font=dict(size=11, color="#94A3B8")),
+        xaxis=dict(gridcolor="rgba(77,163,255,0.06)", linecolor="rgba(77,163,255,0.1)",
+                   tickfont=dict(color="#64748B", size=11), title_font=dict(color="#94A3B8")),
+        yaxis=dict(gridcolor="rgba(77,163,255,0.06)", linecolor="rgba(77,163,255,0.1)",
+                   tickfont=dict(color="#64748B", size=11), title_font=dict(color="#94A3B8")),
         margin=dict(l=20, r=20, t=40, b=20),
-        hoverlabel=dict(
-            bgcolor=hover_bg, bordercolor=legend_bc,
-            font=dict(family="Inter", color=hover_fc, size=12)
-        ),
+        hoverlabel=dict(bgcolor="#0F1A33", bordercolor="rgba(77,163,255,0.3)",
+                        font=dict(family="Inter", color="#E2E8F0", size=12)),
     )
     return fig
 
-def chart_config():
-    """Return Plotly config that enables interactive zoom/pan toolbar."""
-    return {
-        "displayModeBar": True,
-        "displaylogo": False,
-        "modeBarButtonsToRemove": ["select2d", "lasso2d", "autoScale2d"],
-        "scrollZoom": True,
-        "toImageButtonOptions": {
-            "format": "png",
-            "filename": "kayfa_chart",
-            "height": 600,
-            "width": 1200,
-            "scale": 2,
-        },
-    }
-
-def csv_download_button(df: pd.DataFrame, label: str = "⬇ Export CSV", filename: str = "data.csv", key: str = None):
-    """Render a themed CSV download button."""
-    buf = io.StringIO()
-    df.to_csv(buf, index=False)
-    theme = get_theme()
-    btn_bg = "#F1F5F9" if theme == "light" else "rgba(77,163,255,0.08)"
-    btn_color = "#334155" if theme == "light" else "#94A3B8"
-    btn_border = "1px solid #CBD5E1" if theme == "light" else "1px solid rgba(77,163,255,0.2)"
-    st.download_button(
-        label=label,
-        data=buf.getvalue(),
-        file_name=filename,
-        mime="text/csv",
-        key=key,
-    )
-
 def insight_box(what, why, action):
-    theme = get_theme()
-    if theme == "dark":
-        bg = "linear-gradient(135deg, rgba(77,163,255,0.04) 0%, rgba(139,92,246,0.04) 100%)"
-        border = "1px solid rgba(77,163,255,0.12)"
-        left = "3px solid #4DA3FF"
-        row_color = "#CBD5E1"
-    else:
-        bg = "linear-gradient(135deg, rgba(59,130,246,0.04) 0%, rgba(99,102,241,0.04) 100%)"
-        border = "1px solid rgba(59,130,246,0.15)"
-        left = "3px solid #3B82F6"
-        row_color = "#334155"
     st.markdown(f"""
-    <div style="background:{bg};border:{border};border-left:{left};border-radius:10px;
-                padding:16px 20px;margin-top:12px;font-size:0.85rem;line-height:1.6;">
-      <div style="margin-bottom:7px;color:{row_color}"><span style="font-weight:600;margin-right:6px;">🟡 What happened:</span>{what}</div>
-      <div style="margin-bottom:7px;color:{row_color}"><span style="font-weight:600;margin-right:6px;">🧠 Why it happened:</span>{why}</div>
-      <div style="color:{row_color}"><span style="font-weight:600;margin-right:6px;">🎯 Recommendation:</span>{action}</div>
+    <div class="insight-box">
+      <div class="row"><span class="label">🟡 What happened:</span> {what}</div>
+      <div class="row"><span class="label">🧠 Why it happened:</span> {why}</div>
+      <div class="row"><span class="label">🎯 Recommendation:</span> {action}</div>
     </div>
     """, unsafe_allow_html=True)
 
 def kpi_card(icon, value, label, trend, trend_dir="neutral"):
-    theme = get_theme()
-    if theme == "dark":
-        bg = "linear-gradient(135deg, rgba(15,26,51,0.9) 0%, rgba(11,16,32,0.9) 100%)"
-        border = "1px solid rgba(77,163,255,0.18)"
-        val_color = "#F1F5F9"
-        label_color = "#64748B"
-    else:
-        bg = "linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)"
-        border = "1px solid #E2E8F0"
-        val_color = "#0F172A"
-        label_color = "#64748B"
-
-    trend_colors = {
-        "up":      ("#22C55E" if theme == "dark" else "#16A34A"),
-        "down":    ("#F87171" if theme == "dark" else "#DC2626"),
-        "neutral": ("#94A3B8" if theme == "dark" else "#64748B"),
-    }
-    tc = trend_colors.get(trend_dir, trend_colors["neutral"])
     st.markdown(f"""
-    <div style="background:{bg};border:{border};border-radius:14px;padding:20px 22px;
-                position:relative;overflow:hidden;transition:all 0.3s ease;
-                box-shadow:0 1px 3px rgba(0,0,0,0.06);">
-      <div style="position:absolute;top:0;left:0;right:0;height:2px;
-                  background:linear-gradient(90deg,#3B82F6,#6366F1);"></div>
-      <div style="font-size:1.5rem;margin-bottom:10px;">{icon}</div>
-      <div style="font-size:2rem;font-weight:700;color:{val_color};line-height:1;">{value}</div>
-      <div style="font-size:0.75rem;color:{label_color};font-weight:500;
-                  text-transform:uppercase;letter-spacing:0.08em;margin-top:5px;">{label}</div>
-      <div style="font-size:0.78rem;margin-top:8px;font-weight:500;color:{tc};">{trend}</div>
+    <div class="kpi-card">
+      <div class="kpi-icon">{icon}</div>
+      <div class="kpi-value">{value}</div>
+      <div class="kpi-label">{label}</div>
+      <div class="kpi-trend {trend_dir}">{trend}</div>
     </div>
     """, unsafe_allow_html=True)
 
 def page_header(title, subtitle):
-    theme = get_theme()
-    if theme == "dark":
-        bg = "linear-gradient(135deg, rgba(77,163,255,0.08) 0%, rgba(139,92,246,0.08) 100%)"
-        border = "1px solid rgba(77,163,255,0.2)"
-        h1_grad = "linear-gradient(135deg, #4DA3FF 0%, #8B5CF6 100%)"
-        p_color = "#94A3B8"
-    else:
-        bg = "linear-gradient(135deg, rgba(59,130,246,0.06) 0%, rgba(99,102,241,0.06) 100%)"
-        border = "1px solid rgba(59,130,246,0.15)"
-        h1_grad = "linear-gradient(135deg, #2563EB 0%, #6366F1 100%)"
-        p_color = "#64748B"
     st.markdown(f"""
-    <div style="background:{bg};border:{border};border-radius:16px;
-                padding:28px 32px;margin-bottom:28px;position:relative;overflow:hidden;">
-      <div style="position:absolute;top:-50%;left:-20%;width:60%;height:200%;
-                  background:radial-gradient(ellipse,rgba(59,130,246,0.06) 0%,transparent 70%);
-                  pointer-events:none;"></div>
-      <h1 style="font-size:1.9rem;font-weight:700;background:{h1_grad};
-                 -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-                 margin:0 0 6px 0;">{title}</h1>
-      <p style="color:{p_color};font-size:0.92rem;margin:0;font-weight:400;">{subtitle}</p>
+    <div class="page-header">
+      <h1>{title}</h1>
+      <p>{subtitle}</p>
     </div>
     """, unsafe_allow_html=True)
 
 def section_title(text):
-    theme = get_theme()
-    color = "#2563EB" if theme == "light" else "#4DA3FF"
-    st.markdown(
-        f'<div style="font-size:0.78rem;font-weight:600;color:{color};text-transform:uppercase;'
-        f'letter-spacing:0.12em;margin-bottom:16px;margin-top:8px;">{text}</div>',
-        unsafe_allow_html=True
-    )
-
-def chart_card_open(title_text):
-    theme = get_theme()
-    if theme == "dark":
-        bg = "rgba(11,16,32,0.7)"
-        border = "1px solid rgba(77,163,255,0.14)"
-        h3_color = "#CBD5E1"
-        bb = "1px solid rgba(77,163,255,0.1)"
-    else:
-        bg = "#FFFFFF"
-        border = "1px solid #E2E8F0"
-        h3_color = "#1E293B"
-        bb = "1px solid #F1F5F9"
-    st.markdown(
-        f'<div style="background:{bg};border:{border};border-radius:16px;padding:24px;'
-        f'margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,0.06);">'
-        f'<h3 style="font-size:1rem;font-weight:600;color:{h3_color};margin:0 0 16px 0;'
-        f'border-bottom:{bb};padding-bottom:12px;">{title_text}</h3>',
-        unsafe_allow_html=True
-    )
-
-def chart_card_close():
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="section-title">{text}</div>', unsafe_allow_html=True)
