@@ -263,16 +263,16 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 page = st.session_state.active_page
 
-# Demo mode banner
+# Connection status banner
 from db import is_demo_mode
 if is_demo_mode():
     st.markdown("""
-    <div style="background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);
-                border-radius:10px;padding:10px 18px;margin-bottom:16px;font-size:0.82rem;color:#FBD24C;
+    <div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);
+                border-radius:10px;padding:10px 18px;margin-bottom:16px;font-size:0.82rem;color:#F87171;
                 display:flex;align-items:center;gap:10px;">
-      <span>⚡</span>
-      <span><strong>Demo Mode</strong> — MongoDB Atlas not reachable from this environment.
-      Showing realistic synthetic data. On your machine, all charts will load live from Atlas.</span>
+      <span>🔴</span>
+      <span><strong>MongoDB Unreachable</strong> — Could not connect to Atlas.
+      Check your MONGO_URI and DB_NAME in App Settings → Secrets. All charts load from live data.</span>
     </div>
     """, unsafe_allow_html=True)
 

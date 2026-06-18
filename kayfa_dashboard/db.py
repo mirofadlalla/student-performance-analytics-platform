@@ -1,6 +1,15 @@
+"""
+db.py — Kayfa Analytics Dashboard
+All data loaded from MongoDB Atlas. Zero hardcoded analytics values.
+Collections expected:
+  students, groups, grades, attendance, concepts, engagement, submissions
+Derived/cached views are computed once per TTL from raw collections.
+"""
+
 import streamlit as st
 import pandas as pd
 import numpy as np
+from scipy import stats as scipy_stats
 
 try:
     import certifi
@@ -9,180 +18,15 @@ try:
 except ImportError:
     MONGO_AVAILABLE = False
 
-# Streamlit Cloud → App Settings → Secrets
+# ── Secrets ─────────────────────────────────────────────────────────────────
 try:
     MONGO_URI = st.secrets["MONGO_URI"]
-    DB_NAME = st.secrets["DB_NAME"]
+    DB_NAME   = st.secrets["DB_NAME"]
 except Exception:
-    st.error(
-        "Missing Streamlit secrets. Please configure MONGO_URI and DB_NAME in App Settings → Secrets."
-    )
+    st.error("Missing Streamlit secrets. Configure MONGO_URI and DB_NAME in App Settings → Secrets.")
     st.stop()
 
-# ── Demo data (realistic — mirrors notebook outputs) ─────────────────────────
-def _demo_students_master(n=500):
-    np.random.seed(42)
-    groups = [f"G{str(i).zfill(2)}" for i in range(1, 11)]
-    courses = {
-        "G01":"C001","G02":"C002","G03":"C002","G04":"C003","G05":"C003",
-        "G06":"C004","G07":"C005","G08":"C006","G09":"C007","G10":"C007",
-    }
-    course_names = {
-        "C001":"Python Fundamentals","C002":"Data Structures & Algorithms",
-        "C003":"Machine Learning","C004":"Web Development","C005":"Digital Marketing",
-        "C006":"Database Design","C007":"Cybersecurity Essentials",
-    }
-    instructors = {"G01":"Dr. Amira","G02":"Dr. Tarek","G03":"Dr. Tarek","G04":"Dr. Sara",
-                   "G05":"Dr. Sara","G06":"Dr. Khaled","G07":"Dr. Laila","G08":"Dr. Omar",
-                   "G09":"Dr. Hassan","G10":"Dr. Hassan"}
-    names = ["Ahmed Ali","Sara Hassan","Mohamed Said","Nour Khaled","Omar Yasser",
-             "Aya Ibrahim","Karim Fady","Mona Tarek","Youssef Sherif","Hana Ziad",
-             "Marwan ElBaz","Rowan ElBaz","Adel AbdelHamid","Farida Gamal","Salma Nabil"]
-    rows = []
-    for i in range(n):
-        gid = np.random.choice(groups[:9] if i != 450 else ["G10"], p=None)
-        att = np.clip(np.random.normal(77, 12), 30, 100)
-        grade = np.clip(att * 0.7 + np.random.normal(20, 8), 35, 98)
-        rows.append({
-            "student_id": f"S{str(i+1).zfill(4)}",
-            "full_name": f"{names[i%len(names)].split()[0]} Student{i+1}",
-            "group_id": gid,
-            "course_id": courses.get(gid, "C001"),
-            "course_name": course_names.get(courses.get(gid, "C001"), "Unknown"),
-            "instructor": instructors.get(gid, "Unknown"),
-            "att_rate_pct": round(att, 1),
-            "avg_grade": round(grade, 1),
-            "failed_concepts": max(0, int(np.random.normal(6 if grade < 65 else 3, 3))),
-            "late_submissions": max(0, int(np.random.poisson(2))),
-            "login_count": max(0, int(np.random.normal(40, 15))),
-            "total_events": max(0, int(np.random.normal(80, 25))),
-            "gender": np.random.choice(["Male", "Female"]),
-            "age": int(np.clip(np.random.normal(24, 4), 17, 40)),
-        })
-    return pd.DataFrame(rows)
-
-def _demo_group_summaries():
-    groups = [f"G{str(i).zfill(2)}" for i in range(1, 11)]
-    courses = {
-        "G01":"Python Fundamentals","G02":"Data Structures & Algorithms",
-        "G03":"Data Structures & Algorithms","G04":"Machine Learning","G05":"Machine Learning",
-        "G06":"Web Development","G07":"Digital Marketing","G08":"Database Design",
-        "G09":"Cybersecurity Essentials","G10":"Cybersecurity Essentials",
-    }
-    instructors = {
-        "G01":"Dr. Amira","G02":"Dr. Tarek","G03":"Dr. Tarek","G04":"Dr. Sara",
-        "G05":"Dr. Sara","G06":"Dr. Khaled","G07":"Dr. Laila","G08":"Dr. Omar",
-        "G09":"Dr. Hassan","G10":"Dr. Hassan",
-    }
-    att_rates = {
-        "G01":81.2,"G02":79.4,"G03":75.6,"G04":83.1,"G05":70.2,
-        "G06":78.9,"G07":60.2,"G08":82.5,"G09":76.0,"G10":65.4,
-    }
-    actual = {
-        "G01":52,"G02":48,"G03":51,"G04":55,"G05":22,"G06":50,"G07":47,"G08":49,"G09":53,"G10":1
-    }
-    stated = {
-        "G01":50,"G02":50,"G03":50,"G04":50,"G05":52,"G06":50,"G07":50,"G08":50,"G09":50,"G10":31
-    }
-    rows = []
-    for g in groups:
-        rows.append({
-            "group_id": g,
-            "course_name": courses.get(g, "Unknown"),
-            "instructor": instructors.get(g, "Unknown"),
-            "att_rate_pct": att_rates.get(g, 75.0),
-            "actual_count": actual.get(g, 50),
-            "stated_num_students": stated.get(g, 50),
-        })
-    return pd.DataFrame(rows)
-
-def _demo_at_risk():
-    return pd.DataFrame([
-        {"student_id":"S0453","full_name":"Marwan ElBaz","group_id":"G07","overall_att":42.1,"avg_grade":51.3,"failed_concepts":22,"recent_att":38.0,"total_events":21,"risk_score":84.7},
-        {"student_id":"S0201","full_name":"Rowan ElBaz","group_id":"G07","overall_att":44.5,"avg_grade":53.1,"failed_concepts":20,"recent_att":40.0,"total_events":19,"risk_score":83.2},
-        {"student_id":"S0312","full_name":"Hossam Fathy","group_id":"G07","overall_att":48.0,"avg_grade":54.7,"failed_concepts":18,"recent_att":45.0,"total_events":24,"risk_score":79.5},
-        {"student_id":"S0098","full_name":"Adel AbdelHamid","group_id":"G10","overall_att":50.2,"avg_grade":56.0,"failed_concepts":17,"recent_att":47.0,"total_events":28,"risk_score":76.1},
-        {"student_id":"S0177","full_name":"Nada Gamal","group_id":"G07","overall_att":51.0,"avg_grade":57.3,"failed_concepts":16,"recent_att":49.0,"total_events":30,"risk_score":74.3},
-        {"student_id":"S0224","full_name":"Seif Mahmoud","group_id":"G05","overall_att":55.4,"avg_grade":58.1,"failed_concepts":15,"recent_att":52.0,"total_events":33,"risk_score":71.8},
-        {"student_id":"S0389","full_name":"Malak Sobhi","group_id":"G07","overall_att":57.0,"avg_grade":58.9,"failed_concepts":14,"recent_att":54.0,"total_events":35,"risk_score":69.4},
-        {"student_id":"S0044","full_name":"Tarek Wahba","group_id":"G05","overall_att":58.3,"avg_grade":59.2,"failed_concepts":13,"recent_att":56.0,"total_events":37,"risk_score":67.2},
-        {"student_id":"S0415","full_name":"Esraa Nour","group_id":"G07","overall_att":60.1,"avg_grade":59.7,"failed_concepts":13,"recent_att":57.0,"total_events":38,"risk_score":65.9},
-        {"student_id":"S0062","full_name":"Sherif Adel","group_id":"G07","overall_att":61.0,"avg_grade":59.8,"failed_concepts":12,"recent_att":58.0,"total_events":40,"risk_score":64.1},
-    ])
-
-def _demo_concept_failures():
-    concepts = [
-        ("C002-K05","Recursion","C002",85.3),
-        ("C003-K12","Overfitting & Regularization","C003",62.1),
-        ("C003-K08","Model Evaluation","C003",58.4),
-        ("C005-K03","Funnel Analytics","C005",47.2),
-        ("C005-K01","SEO Fundamentals","C005",45.8),
-        ("C002-K11","Dynamic Programming","C002",44.1),
-        ("C003-K15","Neural Networks","C003",42.7),
-        ("C002-K03","Trees & Graphs","C002",41.3),
-        ("C006-K04","SQL Joins","C006",39.5),
-        ("C001-K07","OOP Concepts","C001",37.2),
-        ("C004-K09","React Hooks","C004",35.6),
-        ("C007-K02","Encryption Basics","C007",34.8),
-        ("C003-K02","Feature Engineering","C003",33.1),
-        ("C002-K09","Sorting Algorithms","C002",31.4),
-        ("C001-K05","List Comprehension","C001",28.9),
-    ]
-    rows = []
-    for cid, cname, course_id, fr in concepts:
-        rows.append({"concept_id":cid,"concept_name":cname,"course_id":course_id,"failure_rate_pct":fr})
-    return pd.DataFrame(rows)
-
-def _demo_grade_trends():
-    months = ["2026-01","2026-02","2026-03","2026-04","2026-05","2026-06"]
-    groups = [f"G{str(i).zfill(2)}" for i in range(1, 11)]
-    base = {"G01":73,"G02":71,"G03":70,"G04":75,"G05":68,"G06":72,"G07":58,"G08":74,"G09":71,"G10":62}
-    rows = []
-    np.random.seed(0)
-    for g in groups:
-        for i, m in enumerate(months):
-            dip = -5 if m == "2026-03" else 0
-            rows.append({"true_group":g,"month":m,"avg_score":round(base[g]+dip+np.random.normal(0,1.5),1)})
-    return pd.DataFrame(rows)
-
-def _demo_attendance_trends():
-    months = ["2026-01","2026-02","2026-03","2026-04","2026-05","2026-06"]
-    rates  = [79.1, 80.4, 62.2, 78.9, 81.3, 79.7]
-    return pd.DataFrame({"month": months, "att_rate": rates})
-
-def _demo_cluster_segments():
-    np.random.seed(1)
-    n = 500
-    segs = np.random.choice(
-        ["High Achievers","Average Engaged","Struggling","At-Risk Disengaged"],
-        n, p=[0.37, 0.28, 0.21, 0.14]
-    )
-    att_map = {"High Achievers":(84,8),"Average Engaged":(77,10),"Struggling":(72,10),"At-Risk Disengaged":(61,10)}
-    grd_map = {"High Achievers":(76,6),"Average Engaged":(70,8),"Struggling":(72,9),"At-Risk Disengaged":(57,7)}
-    rows = []
-    for i, seg in enumerate(segs):
-        a_mu, a_sd = att_map[seg]; g_mu, g_sd = grd_map[seg]
-        rows.append({
-            "student_id": f"S{str(i+1).zfill(4)}",
-            "full_name": f"Student {i+1}",
-            "segment": seg,
-            "att_rate": round(float(np.clip(np.random.normal(a_mu, a_sd), 30, 100)), 1),
-            "avg_grade": round(float(np.clip(np.random.normal(g_mu, g_sd), 35, 98)), 1),
-            "total_events": max(0, int(np.random.normal(60, 25))),
-            "failed_concepts": max(0, int(np.random.normal(5 if "Risk" not in seg else 13, 3))),
-        })
-    return pd.DataFrame(rows)
-
-DEMO_DATA = {
-    "students_master":    _demo_students_master,
-    "group_summaries":    _demo_group_summaries,
-    "at_risk_students":   _demo_at_risk,
-    "concept_failures":   _demo_concept_failures,
-    "grade_trends":       _demo_grade_trends,
-    "attendance_trends":  _demo_attendance_trends,
-    "cluster_segments":   _demo_cluster_segments,
-}
-
+# ── Connection ───────────────────────────────────────────────────────────────
 @st.cache_resource(show_spinner=False)
 def get_db():
     if not MONGO_AVAILABLE:
@@ -194,25 +38,404 @@ def get_db():
     except Exception:
         return None
 
-@st.cache_data(ttl=300, show_spinner=False)
-def load_collection(collection_name: str) -> pd.DataFrame:
-    db = get_db()
-    if db is not None:
-        try:
-            docs = list(db[collection_name].find({}, {"_id": 0}))
-            if docs:
-                return pd.DataFrame(docs)
-        except Exception:
-            pass
-    # Fallback to demo data
-    if collection_name in DEMO_DATA:
-        return DEMO_DATA[collection_name]()
-    return pd.DataFrame()
-
 def is_demo_mode():
     return get_db() is None
 
-# ── Shared UI helpers ────────────────────────────────────────────────────────
+# ── Raw collection loader ────────────────────────────────────────────────────
+@st.cache_data(ttl=300, show_spinner=False)
+def load_raw(collection_name: str) -> pd.DataFrame:
+    """Load a raw MongoDB collection as a DataFrame."""
+    db = get_db()
+    if db is None:
+        return pd.DataFrame()
+    try:
+        docs = list(db[collection_name].find({}, {"_id": 0}))
+        return pd.DataFrame(docs) if docs else pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
+
+# ── Derived view: students_master ────────────────────────────────────────────
+@st.cache_data(ttl=300, show_spinner=False)
+def load_students_master() -> pd.DataFrame:
+    """
+    Build master student table from raw students + grades + attendance + concepts + engagement + groups.
+    Per-student aggregations:
+      - att_rate_pct: % of attended sessions
+      - avg_grade: mean of (score/max_score)*100 across all grade records
+      - failed_concepts: count of concept records with mastery_status='failed' (or score<60)
+      - late_submissions: count of is_late=True submissions
+      - login_count: count of event_type='login' engagement events
+      - total_events: total engagement events
+    """
+    students = load_raw("students")
+    if students.empty:
+        return pd.DataFrame()
+
+    # Attendance rate
+    att = load_raw("attendance")
+    if not att.empty and "student_id" in att.columns and "status" in att.columns:
+        att["attended"] = att["status"].str.lower().str.strip().isin(["attended", "present", "1", "true"])
+        att_agg = att.groupby("student_id").agg(
+            att_sessions=("attended", "count"),
+            att_present=("attended", "sum"),
+        ).reset_index()
+        att_agg["att_rate_pct"] = (att_agg["att_present"] / att_agg["att_sessions"] * 100).round(1)
+        students = students.merge(att_agg[["student_id", "att_rate_pct"]], on="student_id", how="left")
+    else:
+        students["att_rate_pct"] = np.nan
+
+    # Average grade (normalised to 0-100)
+    grades = load_raw("grades")
+    if not grades.empty and "student_id" in grades.columns and "score" in grades.columns:
+        grades["score"] = pd.to_numeric(grades["score"], errors="coerce")
+        grades["max_score"] = pd.to_numeric(grades.get("max_score", pd.Series([100]*len(grades))), errors="coerce").fillna(100)
+        grades["norm_score"] = (grades["score"] / grades["max_score"] * 100).clip(0, 100)
+        grade_agg = grades.groupby("student_id")["norm_score"].mean().round(1).reset_index()
+        grade_agg.columns = ["student_id", "avg_grade"]
+        students = students.merge(grade_agg, on="student_id", how="left")
+    else:
+        students["avg_grade"] = np.nan
+
+    # Failed concepts
+    concepts = load_raw("concepts")
+    if not concepts.empty and "student_id" in concepts.columns:
+        if "mastery_status" in concepts.columns:
+            concepts["_failed"] = concepts["mastery_status"].str.lower().str.strip() == "failed"
+        elif "score" in concepts.columns:
+            concepts["score"] = pd.to_numeric(concepts["score"], errors="coerce")
+            concepts["_failed"] = concepts["score"] < 60
+        else:
+            concepts["_failed"] = False
+        fc_agg = concepts.groupby("student_id")["_failed"].sum().reset_index()
+        fc_agg.columns = ["student_id", "failed_concepts"]
+        students = students.merge(fc_agg, on="student_id", how="left")
+    else:
+        students["failed_concepts"] = 0
+
+    # Late submissions
+    subs = load_raw("submissions")
+    if not subs.empty and "student_id" in subs.columns and "is_late" in subs.columns:
+        subs["is_late"] = subs["is_late"].astype(str).str.lower().isin(["true", "1", "yes"])
+        late_agg = subs.groupby("student_id")["is_late"].sum().reset_index()
+        late_agg.columns = ["student_id", "late_submissions"]
+        students = students.merge(late_agg, on="student_id", how="left")
+    else:
+        students["late_submissions"] = 0
+
+    # Engagement
+    eng = load_raw("engagement")
+    if not eng.empty and "student_id" in eng.columns:
+        total_ev = eng.groupby("student_id").size().reset_index(name="total_events")
+        students = students.merge(total_ev, on="student_id", how="left")
+        if "event_type" in eng.columns:
+            logins = eng[eng["event_type"].str.lower() == "login"].groupby("student_id").size().reset_index(name="login_count")
+            students = students.merge(logins, on="student_id", how="left")
+        else:
+            students["login_count"] = np.nan
+    else:
+        students["total_events"] = 0
+        students["login_count"] = 0
+
+    # Group info
+    groups = load_raw("groups")
+    if not groups.empty and "group_id" in groups.columns and "group_id" in students.columns:
+        gcols = ["group_id"]
+        for c in ["course_name", "course_id", "instructor"]:
+            if c in groups.columns:
+                gcols.append(c)
+        students = students.merge(groups[gcols].drop_duplicates("group_id"), on="group_id", how="left")
+
+    # Fill numeric NAs
+    for col in ["att_rate_pct", "avg_grade", "failed_concepts", "late_submissions", "total_events", "login_count"]:
+        if col in students.columns:
+            students[col] = pd.to_numeric(students[col], errors="coerce").fillna(0)
+
+    return students
+
+# ── Derived view: group_summaries ────────────────────────────────────────────
+@st.cache_data(ttl=300, show_spinner=False)
+def load_group_summaries() -> pd.DataFrame:
+    """
+    Group-level aggregation from raw data.
+    Returns: group_id, course_name, instructor, att_rate_pct, actual_count, stated_num_students, avg_grade
+    """
+    groups = load_raw("groups")
+    master = load_students_master()
+
+    if groups.empty:
+        return pd.DataFrame()
+
+    if not master.empty:
+        actual = master.groupby("group_id").agg(
+            actual_count=("student_id", "count"),
+            att_rate_pct=("att_rate_pct", "mean"),
+            avg_grade=("avg_grade", "mean"),
+        ).reset_index()
+        actual["att_rate_pct"] = actual["att_rate_pct"].round(1)
+        actual["avg_grade"]    = actual["avg_grade"].round(1)
+        groups = groups.merge(actual, on="group_id", how="left")
+    else:
+        groups["actual_count"] = 0
+        groups["att_rate_pct"] = np.nan
+        groups["avg_grade"]    = np.nan
+
+    # stated_num_students — from groups table or compute from students
+    if "num_students" in groups.columns and "stated_num_students" not in groups.columns:
+        groups = groups.rename(columns={"num_students": "stated_num_students"})
+    elif "stated_num_students" not in groups.columns:
+        groups["stated_num_students"] = groups.get("actual_count", 0)
+
+    return groups
+
+# ── Derived view: at_risk_students ───────────────────────────────────────────
+@st.cache_data(ttl=300, show_spinner=False)
+def load_at_risk_students(top_n: int = 10) -> pd.DataFrame:
+    """
+    Compute composite risk score from live master data.
+    Risk = 0.4*(100-att) + 0.35*(100-avg_grade) + 0.25*(failed_concepts/max_fc*100)
+    """
+    master = load_students_master()
+    if master.empty:
+        return pd.DataFrame()
+
+    df = master.copy()
+    df["att_rate_pct"]   = pd.to_numeric(df.get("att_rate_pct",   0), errors="coerce").fillna(0)
+    df["avg_grade"]      = pd.to_numeric(df.get("avg_grade",      0), errors="coerce").fillna(0)
+    df["failed_concepts"]= pd.to_numeric(df.get("failed_concepts", 0), errors="coerce").fillna(0)
+    df["total_events"]   = pd.to_numeric(df.get("total_events",   0), errors="coerce").fillna(0)
+
+    max_fc = max(df["failed_concepts"].max(), 1)
+
+    df["risk_score"] = (
+        0.40 * (100 - df["att_rate_pct"]) +
+        0.35 * (100 - df["avg_grade"]) +
+        0.25 * (df["failed_concepts"] / max_fc * 100)
+    ).round(1)
+
+    # Recent attendance: last 60 days via raw attendance
+    att = load_raw("attendance")
+    if not att.empty and "student_id" in att.columns and "session_date" in att.columns:
+        att["session_date"] = pd.to_datetime(att["session_date"], errors="coerce")
+        recent_cutoff = att["session_date"].max() - pd.Timedelta(days=60)
+        recent = att[att["session_date"] >= recent_cutoff].copy()
+        recent["attended"] = recent["status"].str.lower().str.strip().isin(["attended", "present", "1", "true"])
+        recent_agg = recent.groupby("student_id").agg(
+            r_sess=("attended", "count"), r_pres=("attended", "sum")
+        ).reset_index()
+        recent_agg["recent_att"] = (recent_agg["r_pres"] / recent_agg["r_sess"] * 100).round(1)
+        df = df.merge(recent_agg[["student_id", "recent_att"]], on="student_id", how="left")
+    else:
+        df["recent_att"] = df["att_rate_pct"]
+
+    cols = ["student_id", "full_name", "group_id", "att_rate_pct", "avg_grade",
+            "failed_concepts", "recent_att", "total_events", "risk_score"]
+    available = [c for c in cols if c in df.columns]
+    result = df[available].rename(columns={"att_rate_pct": "overall_att"})
+    return result.nlargest(top_n, "risk_score").reset_index(drop=True)
+
+# ── Derived view: concept_failures ───────────────────────────────────────────
+@st.cache_data(ttl=300, show_spinner=False)
+def load_concept_failures() -> pd.DataFrame:
+    """
+    Per-concept failure rate from raw concepts collection.
+    Returns: concept_id, concept_name, course_id, failure_rate_pct, total_students, failed_students
+    """
+    concepts = load_raw("concepts")
+    if concepts.empty:
+        return pd.DataFrame()
+
+    if "mastery_status" in concepts.columns:
+        concepts["_failed"] = concepts["mastery_status"].str.lower().str.strip() == "failed"
+    elif "score" in concepts.columns:
+        concepts["score"] = pd.to_numeric(concepts["score"], errors="coerce")
+        concepts["_failed"] = concepts["score"] < 60
+    else:
+        return pd.DataFrame()
+
+    group_cols = []
+    for c in ["concept_id", "concept_name", "course_id"]:
+        if c in concepts.columns:
+            group_cols.append(c)
+
+    if not group_cols:
+        return pd.DataFrame()
+
+    agg = concepts.groupby(group_cols).agg(
+        total_students=("_failed", "count"),
+        failed_students=("_failed", "sum"),
+    ).reset_index()
+    agg["failure_rate_pct"] = (agg["failed_students"] / agg["total_students"] * 100).round(1)
+    return agg.sort_values("failure_rate_pct", ascending=False).reset_index(drop=True)
+
+# ── Derived view: grade_trends ────────────────────────────────────────────────
+@st.cache_data(ttl=300, show_spinner=False)
+def load_grade_trends() -> pd.DataFrame:
+    """
+    Monthly average grade per group from raw grades.
+    Returns: true_group, month (YYYY-MM), avg_score
+    """
+    grades = load_raw("grades")
+    students = load_raw("students")
+    if grades.empty or students.empty:
+        return pd.DataFrame()
+
+    # Find date column
+    date_col = None
+    for c in ["submitted_at", "graded_at", "date", "created_at"]:
+        if c in grades.columns:
+            date_col = c
+            break
+    if date_col is None:
+        return pd.DataFrame()
+
+    grades["_date"] = pd.to_datetime(grades[date_col], errors="coerce")
+    grades = grades.dropna(subset=["_date"])
+    grades["month"] = grades["_date"].dt.to_period("M").astype(str)
+
+    grades["score"]     = pd.to_numeric(grades["score"],     errors="coerce")
+    grades["max_score"] = pd.to_numeric(grades.get("max_score", pd.Series([100]*len(grades))), errors="coerce").fillna(100)
+    grades["norm_score"]= (grades["score"] / grades["max_score"] * 100).clip(0, 100)
+
+    # Join group_id via student_id
+    if "group_id" not in grades.columns:
+        sid_group = students[["student_id", "group_id"]].dropna().drop_duplicates("student_id")
+        grades = grades.merge(sid_group, on="student_id", how="left")
+
+    if "group_id" not in grades.columns:
+        return pd.DataFrame()
+
+    trend = grades.groupby(["group_id", "month"])["norm_score"].mean().round(1).reset_index()
+    trend.columns = ["true_group", "month", "avg_score"]
+    return trend.sort_values(["true_group", "month"]).reset_index(drop=True)
+
+# ── Derived view: attendance_trends ──────────────────────────────────────────
+@st.cache_data(ttl=300, show_spinner=False)
+def load_attendance_trends() -> pd.DataFrame:
+    """
+    Monthly platform-wide attendance rate from raw attendance.
+    Returns: month (YYYY-MM), att_rate
+    """
+    att = load_raw("attendance")
+    if att.empty:
+        return pd.DataFrame()
+
+    date_col = None
+    for c in ["session_date", "date", "created_at"]:
+        if c in att.columns:
+            date_col = c
+            break
+    if date_col is None:
+        return pd.DataFrame()
+
+    att["_date"] = pd.to_datetime(att[date_col], errors="coerce")
+    att = att.dropna(subset=["_date"])
+    att["month"] = att["_date"].dt.to_period("M").astype(str)
+    att["attended"] = att["status"].str.lower().str.strip().isin(["attended", "present", "1", "true"])
+
+    trend = att.groupby("month").agg(
+        total=("attended", "count"),
+        present=("attended", "sum"),
+    ).reset_index()
+    trend["att_rate"] = (trend["present"] / trend["total"] * 100).round(1)
+    return trend[["month", "att_rate"]].sort_values("month").reset_index(drop=True)
+
+# ── Derived view: cluster_segments ───────────────────────────────────────────
+@st.cache_data(ttl=300, show_spinner=False)
+def load_cluster_segments() -> pd.DataFrame:
+    """
+    K-Means (k=4) segmentation on att_rate_pct + avg_grade from master data.
+    Segment labels assigned by centroid rank.
+    """
+    master = load_students_master()
+    if master.empty:
+        return pd.DataFrame()
+
+    features = ["att_rate_pct", "avg_grade"]
+    df = master.dropna(subset=features).copy()
+    if len(df) < 4:
+        return df
+
+    try:
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.cluster import KMeans
+
+        X = StandardScaler().fit_transform(df[features])
+        km = KMeans(n_clusters=4, random_state=42, n_init=10)
+        df["_cluster"] = km.fit_predict(X)
+
+        # Label by centroid mean grade: highest→High Achievers, lowest→At-Risk
+        centroids = df.groupby("_cluster")[["att_rate_pct", "avg_grade"]].mean()
+        centroids["score"] = centroids["att_rate_pct"] + centroids["avg_grade"]
+        rank_order = centroids["score"].rank(ascending=False).astype(int)
+        label_map = {
+            1: "High Achievers",
+            2: "Average Engaged",
+            3: "Struggling",
+            4: "At-Risk Disengaged",
+        }
+        cluster_to_label = {c: label_map[r] for c, r in rank_order.items()}
+        df["segment"] = df["_cluster"].map(cluster_to_label)
+    except Exception:
+        # fallback: rule-based segmentation
+        def _seg(row):
+            if row["att_rate_pct"] >= 80 and row["avg_grade"] >= 75:
+                return "High Achievers"
+            elif row["att_rate_pct"] >= 70 and row["avg_grade"] >= 60:
+                return "Average Engaged"
+            elif row["att_rate_pct"] >= 60:
+                return "Struggling"
+            return "At-Risk Disengaged"
+        df["segment"] = df.apply(_seg, axis=1)
+
+    seg_cols = ["student_id", "full_name", "group_id", "segment", "att_rate_pct", "avg_grade",
+                "total_events", "failed_concepts"]
+    available = [c for c in seg_cols if c in df.columns]
+    return df[available].rename(columns={"att_rate_pct": "att_rate"}).reset_index(drop=True)
+
+# ── Derived view: audit_log ───────────────────────────────────────────────────
+@st.cache_data(ttl=300, show_spinner=False)
+def load_audit_log() -> pd.DataFrame:
+    """Load audit log from MongoDB. Falls back to empty DataFrame (not fake data)."""
+    return load_raw("audit_log")
+
+# ── Unified load_collection router ───────────────────────────────────────────
+@st.cache_data(ttl=300, show_spinner=False)
+def load_collection(name: str) -> pd.DataFrame:
+    """
+    Public API for pages. Routes to the correct derived view.
+    Never returns hardcoded data — returns empty DataFrame if MongoDB unreachable.
+    """
+    routes = {
+        "students_master":   load_students_master,
+        "group_summaries":   load_group_summaries,
+        "at_risk_students":  load_at_risk_students,
+        "concept_failures":  load_concept_failures,
+        "grade_trends":      load_grade_trends,
+        "attendance_trends": load_attendance_trends,
+        "cluster_segments":  load_cluster_segments,
+        "audit_log":         load_audit_log,
+    }
+    fn = routes.get(name)
+    if fn:
+        return fn()
+    return load_raw(name)
+
+# ── Compute Pearson r dynamically ─────────────────────────────────────────────
+def pearson_r(df: pd.DataFrame, col_x: str, col_y: str) -> tuple[float, float]:
+    """Returns (r, p_value) computed from live data."""
+    sub = df[[col_x, col_y]].dropna()
+    if len(sub) < 3:
+        return float("nan"), float("nan")
+    r, p = scipy_stats.pearsonr(sub[col_x], sub[col_y])
+    return round(r, 3), p
+
+# ── Platform average helper ───────────────────────────────────────────────────
+def platform_avg(df: pd.DataFrame, col: str) -> float:
+    if df.empty or col not in df.columns:
+        return float("nan")
+    return round(df[col].mean(), 1)
+
+# ── Shared UI helpers ─────────────────────────────────────────────────────────
 def plotly_layout(fig, title="", height=420):
     fig.update_layout(
         title=dict(text=title, font=dict(size=14, color="#CBD5E1", family="Inter"), x=0),
