@@ -8,6 +8,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(__file__))
 
+# 1. Streamlit Page Configuration must be the first command
 st.set_page_config(
     page_title="Kayfa Student Analytics",
     page_icon="🎓",
@@ -16,20 +17,27 @@ st.set_page_config(
 )
 
 # ────────────────────────────────────────────────────────────────────────────
-# THEME TOGGLE & PERSISTENCE
+# THEME TOGGLE & CHART EXPANSION SETTINGS
 # ────────────────────────────────────────────────────────────────────────────
 if "theme" not in st.session_state:
     st.session_state.theme = "dark"
 
-# Render selector in sidebar (at the very bottom or top)
-# We place it at the top for easy toggle access
+# Appearance toggle in sidebar
 theme_choice = st.sidebar.selectbox(
     "Appearance 🎨",
     ["Dark Theme 🌙", "Light Theme ☀️"],
-    index=0 if st.session_state.theme == "dark" else 1
+    index=0 if st.session_state.theme == "dark" else 1,
+    key="sb_theme_selector"
 )
 st.session_state.theme = "dark" if "Dark" in theme_choice else "light"
 theme = st.session_state.theme
+
+# Expand charts toggle
+expand_charts = st.sidebar.checkbox(
+    "Expand Charts (Full Width) ↕️",
+    value=False,
+    key="sb_expand_charts"
+)
 
 # Theme configurations
 if theme == "light":
@@ -222,6 +230,10 @@ GREEN  = "#4ADE80"
 # PLOTLY THEMED LAYOUT
 # ────────────────────────────────────────────────────────────────────────────
 def theme_plotly_layout(fig, title="", height=420):
+    # Dynamic height adjustment if expansion is enabled
+    if expand_charts:
+        height = int(height * 1.6)
+        
     is_light = (st.session_state.theme == "light")
     text_color = "#334155" if is_light else "#E2E8F0"
     grid_color = "rgba(15, 23, 42, 0.06)" if is_light else "rgba(77, 163, 255, 0.06)"
@@ -245,6 +257,20 @@ def theme_plotly_layout(fig, title="", height=420):
                         font=dict(family="Inter", color=text_color, size=12)),
     )
     return fig
+
+# Wrapper to render high-res image download configuration
+def show_chart(fig, key_suffix=""):
+    config = {
+        "displayModeBar": True,
+        "toImageButtonOptions": {
+            "format": "png",
+            "filename": f"kayfa_chart_{key_suffix}" if key_suffix else "kayfa_chart",
+            "height": 800,
+            "width": 1400,
+            "scale": 3  # High-quality full image export
+        }
+    }
+    st.plotly_chart(fig, use_container_width=True, config=config)
 
 # ────────────────────────────────────────────────────────────────────────────
 # SIDEBAR LOGO & TITLE
@@ -277,7 +303,7 @@ questions_dict = {
     "Q15: Group Grade Trends Across Term": "q15"
 }
 
-selected_q_label = st.sidebar.radio("Select Analytics Section", list(questions_dict.keys()))
+selected_q_label = st.sidebar.radio("Select Analytics Section", list(questions_dict.keys()), key="main_nav_radio")
 selected_q = questions_dict[selected_q_label]
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -315,8 +341,12 @@ def load_all_data():
 with st.spinner("Syncing analytics intelligence from MongoDB Atlas…"):
     data = load_all_data()
 
+# ── Persistent Header Text ──────────────────────────────────────────────────
+# Mapped to page selection and printed on every view
+st.markdown('<div class="app-header">Kayfa — كيف &nbsp;&middot;&middot;&nbsp; Week 2 &nbsp;&middot;&nbsp; Data Analytics Track &nbsp;&middot;&nbsp; Evaluation</div>', unsafe_allow_html=True)
+
 # ────────────────────────────────────────────────────────────────────────────
-# RENDER CONTENT BY SELECTED NAVIGATION option
+# RENDER CONTENT BY SELECTED NAVIGATION OPTION
 # ────────────────────────────────────────────────────────────────────────────
 if selected_q == "overview":
     # HERO HEADER
@@ -376,7 +406,7 @@ if selected_q == "overview":
                 fig1.add_hline(y=plat_att, line_dash="dash", line_color=AMBER, line_width=1.5)
                 fig1 = theme_plotly_layout(fig1, height=320)
                 fig1.update_yaxes(range=[0, 100])
-                st.plotly_chart(fig1, use_container_width=True, config={"displayModeBar": False})
+                show_chart(fig1, "ov_attendance")
                 chart_card_close()
                 
         with c_insights_b:
@@ -395,7 +425,7 @@ if selected_q == "overview":
                 fig3.add_hline(y=60, line_dash="dot", line_color=RED, line_width=1)
                 fig3 = theme_plotly_layout(fig3, height=320)
                 fig3.update_yaxes(range=[40, 90])
-                st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar": False})
+                show_chart(fig3, "ov_grades")
                 chart_card_close()
 
         st.markdown("<hr>", unsafe_allow_html=True)
@@ -421,7 +451,7 @@ if selected_q == "overview":
             ), row=2, col=1)
             
             fig9 = theme_plotly_layout(fig9, height=400)
-            st.plotly_chart(fig9, use_container_width=True, config={"displayModeBar": False})
+            show_chart(fig9, "ov_monthly_trends")
             chart_card_close()
 
         st.markdown("<hr>", unsafe_allow_html=True)
@@ -456,7 +486,7 @@ if selected_q == "overview":
                         font=dict(size=13, color=text_primary, family="Inter"),
                     )],
                 )
-                st.plotly_chart(fig11a, use_container_width=True, config={"displayModeBar": False})
+                show_chart(fig11a, "ov_segments")
                 chart_card_close()
                 
         with c_risk_b:
@@ -473,7 +503,7 @@ if selected_q == "overview":
                 )
                 fig14 = theme_plotly_layout(fig14, height=280)
                 fig14.update_layout(coloraxis_showscale=False)
-                st.plotly_chart(fig14, use_container_width=True, config={"displayModeBar": False})
+                show_chart(fig14, "ov_risk")
                 chart_card_close()
                 
     else:
@@ -501,7 +531,7 @@ elif selected_q == "q1":
                        annotation_font_color=AMBER, annotation_font_size=11)
         fig1 = theme_plotly_layout(fig1, height=380)
         fig1.update_yaxes(range=[0, 100], title_text="Attendance Rate (%)")
-        st.plotly_chart(fig1, use_container_width=True, config={"displayModeBar": False})
+        show_chart(fig1, "q1")
         
         insight_box(
             "The platform average attendance is 77.3%. Groups G07 (60.2%) and G10 (65.4%) remain the primary outliers, significantly below average.",
@@ -539,7 +569,7 @@ elif selected_q == "q2":
                             annotation_text="Pass 60", annotation_font_color=RED)
             fig2a = theme_plotly_layout(fig2a, height=340)
             fig2a.update_yaxes(range=[0, 100], title_text="Average Score")
-            st.plotly_chart(fig2a, use_container_width=True, config={"displayModeBar": False})
+            show_chart(fig2a, "q2_scores")
             
         with c2b:
             fig2b = go.Figure(go.Bar(
@@ -551,7 +581,7 @@ elif selected_q == "q2":
             ))
             fig2b = theme_plotly_layout(fig2b, height=340)
             fig2b.update_yaxes(title_text="Assessment Count")
-            st.plotly_chart(fig2b, use_container_width=True, config={"displayModeBar": False})
+            show_chart(fig2b, "q2_counts")
             
         insight_box(
             "Assignments are the most volatile and challenging assessment type, with the lowest mean score (65.3) and the highest standard deviation (12.9).",
@@ -582,7 +612,7 @@ elif selected_q == "q3":
                        annotation_text="Pass 60", annotation_font_color=RED)
         fig3 = theme_plotly_layout(fig3, height=380)
         fig3.update_yaxes(range=[40, 90], title_text="Average Score")
-        st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar": False})
+        show_chart(fig3, "q3")
         
         insight_box(
             "Cybersecurity Essentials leads with an average grade of 76.2 (std=8.4). Digital Marketing is the clear outlier on the low end, averaging 59.1.",
@@ -610,7 +640,7 @@ elif selected_q == "q4":
         fig4.update_traces(marker=dict(size=5))
         fig4.add_hline(y=60, line_dash="dot", line_color=RED, line_width=1)
         fig4 = theme_plotly_layout(fig4, height=420)
-        st.plotly_chart(fig4, use_container_width=True, config={"displayModeBar": False})
+        show_chart(fig4, "q4")
         
         insight_box(
             f"We see a moderate positive correlation (r = {r4:.3f}) between attendance and grades across {len(df_q4)} students.",
@@ -639,7 +669,7 @@ elif selected_q == "q5":
             )
             fig5a.update_traces(marker=dict(size=5))
             fig5a = theme_plotly_layout(fig5a, height=380, title=f"Login Frequency vs Average Grade (r = {r5a:.3f})")
-            st.plotly_chart(fig5a, use_container_width=True, config={"displayModeBar": False})
+            show_chart(fig5a, "q5_logins")
             
         with tab5b:
             r5b, p5b = pearson_r(df_q5, "video_seconds", "avg_grade")
@@ -651,7 +681,7 @@ elif selected_q == "q5":
             )
             fig5b.update_traces(marker=dict(size=5))
             fig5b = theme_plotly_layout(fig5b, height=380, title=f"Total Video Watch Time (s) vs Average Grade (r = {r5b:.3f})")
-            st.plotly_chart(fig5b, use_container_width=True, config={"displayModeBar": False})
+            show_chart(fig5b, "q5_video")
             
         insight_box(
             "Engagement metrics are strong predictors of performance. Video watch time (r=0.402) has a stronger correlation with grades than login frequency (r=0.330).",
@@ -676,7 +706,7 @@ elif selected_q == "q6":
             text=df_q6s["failure_rate_pct"].round(1).astype(str) + "%"
         )
         fig6 = theme_plotly_layout(fig6, height=450)
-        st.plotly_chart(fig6, use_container_width=True, config={"displayModeBar": False})
+        show_chart(fig6, "q6")
         
         insight_box(
             "Recursion remains the most difficult concept with a staggering 85.3% failure rate, followed by Overfitting & Model Evaluation in Cybersecurity (50-60%).",
@@ -702,7 +732,7 @@ elif selected_q == "q7":
         fig7.add_hline(y=60, line_dash="dash", line_color="gray", annotation_text="60% target")
         fig7 = theme_plotly_layout(fig7, height=340)
         fig7.update_yaxes(range=[0, 50], title_text="Mastery Rate (%)")
-        st.plotly_chart(fig7, use_container_width=True, config={"displayModeBar": False})
+        show_chart(fig7, "q7")
         
         insight_box(
             "Recursion mastery reached 30.0% at its peak but dipped to 9.0% at its lowest.",
@@ -731,7 +761,7 @@ elif selected_q == "q8":
                 labels={"is_late": "Submitted Late", "score": "Score"}
             )
             fig8a = theme_plotly_layout(fig8a, height=350, title=f"Score Distribution: On-Time vs Late Submissions (r = {r8:.3f})")
-            st.plotly_chart(fig8a, use_container_width=True, config={"displayModeBar": False})
+            show_chart(fig8a, "q8_box")
             
         with col8b:
             fig8b = px.scatter(
@@ -741,7 +771,7 @@ elif selected_q == "q8":
                 labels={"buffer_hours": "Hours Before Deadline (negative = late)", "score": "Score"}
             )
             fig8b = theme_plotly_layout(fig8b, height=350, title="Submission Buffer vs Score")
-            st.plotly_chart(fig8b, use_container_width=True, config={"displayModeBar": False})
+            show_chart(fig8b, "q8_scatter")
             
         late_avg   = df_q8[df_q8['is_late']==True]['score'].mean()
         ontime_avg = df_q8[df_q8['is_late']==False]['score'].mean()
@@ -780,7 +810,7 @@ elif selected_q == "q9":
         ), row=2, col=1)
         
         fig9 = theme_plotly_layout(fig9, height=500)
-        st.plotly_chart(fig9, use_container_width=True, config={"displayModeBar": False})
+        show_chart(fig9, "q9")
         
         insight_box(
             "The analysis confirms a synchronized dip in March 2026, where attendance fell to 62.2% and engagement events dropped to 3,983.",
@@ -805,7 +835,7 @@ elif selected_q == "q10":
             ))
         fig10 = theme_plotly_layout(fig10, height=380)
         fig10.update_layout(barmode='group')
-        st.plotly_chart(fig10, use_container_width=True, config={"displayModeBar": False})
+        show_chart(fig10, "q10")
         
         insight_box(
             "The 26-30 age band shows the best overall outcomes, with the highest average grade (71.3) and attendance (79.1%).",
@@ -848,7 +878,7 @@ elif selected_q == "q11":
                     font=dict(size=14, color=text_primary, family="Inter"),
                 )],
             )
-            st.plotly_chart(fig11a, use_container_width=True, config={"displayModeBar": False})
+            show_chart(fig11a, "q11_pie")
             chart_card_close()
             
         with c11b:
@@ -864,7 +894,7 @@ elif selected_q == "q11":
             fig11b.add_hline(y=60, line_dash="dot", line_color=RED, line_width=1)
             fig11b.add_vline(x=70, line_dash="dot", line_color=AMBER, line_width=1)
             fig11b = theme_plotly_layout(fig11b, height=320)
-            st.plotly_chart(fig11b, use_container_width=True, config={"displayModeBar": False})
+            show_chart(fig11b, "q11_scatter")
             chart_card_close()
             
         insight_box(
@@ -893,7 +923,7 @@ elif selected_q == "q12":
         ))
         fig12.update_layout(barmode="group")
         fig12 = theme_plotly_layout(fig12, height=360)
-        st.plotly_chart(fig12, use_container_width=True, config={"displayModeBar": False})
+        show_chart(fig12, "q12")
         
         insight_box(
             "Serious discrepancies exist in group headcounts. G10 and G05 both have a 30-student deficit between stated and actual counts.",
@@ -955,7 +985,7 @@ elif selected_q == "q14":
                 labels={"full_name": "Student", "risk_score": "Risk Score"},
             )
             fig14 = theme_plotly_layout(fig14, height=420)
-            st.plotly_chart(fig14, use_container_width=True, config={"displayModeBar": False})
+            show_chart(fig14, "q14")
             chart_card_close()
             
         with c14b:
@@ -993,7 +1023,7 @@ elif selected_q == "q15":
         )
         fig15.add_hline(y=60, line_dash="dot", line_color="red", annotation_text="Pass threshold (60)")
         fig15 = theme_plotly_layout(fig15, height=450)
-        st.plotly_chart(fig15, use_container_width=True, config={"displayModeBar": False})
+        show_chart(fig15, "q15")
         
         insight_box(
             "Most groups recovered after the March dip, but G07 remained consistently below the 60% pass threshold for nearly the entire term.",
